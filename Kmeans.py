@@ -1,8 +1,9 @@
-__authors__ = ['XXXXXXXXX','YYYYYYYY']
-__group__ = 'GrupZZ'
+__authors__ = ['1531206','1456135', '1533031']
+__group__ = 'GrupDM12'
 
 import numpy as np
 import utils
+
 
 class KMeans:
 
@@ -31,9 +32,9 @@ class KMeans:
                     the last dimension
         """
         if len(X.shape) == 2:
-            self.X = X.astype('float64').copy()
+            self.X = X.astype('float64')
         else:
-            self.X = X.reshape((X.shape[0] * X.shape[1], X.shape[2])).astype('float64').copy()
+            self.X = X.reshape((X.shape[0] * X.shape[1], X.shape[2])).astype('float64')
 
 
     def _init_options(self, options=None):
@@ -80,7 +81,8 @@ class KMeans:
 
 
     def get_labels(self):
-        """        Calculates the closest centroid of all points in X
+        """        
+        Calculates the closest centroid of all points in X
         and assigns each point to the closest centroid
         """
         
