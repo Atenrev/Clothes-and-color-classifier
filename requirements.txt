@@ -1,0 +1,4 @@
+numpy
+pickle
+scipy
+scikit-image

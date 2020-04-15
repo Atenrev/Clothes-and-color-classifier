@@ -19,10 +19,6 @@ class KMeans:
         self._init_X(X)
         self._init_options(options)  # DICT options
 
-    #############################################################
-    ##  THIS FUNCTION CAN BE MODIFIED FROM THIS POINT, if needed
-    #############################################################
-
 
     def _init_X(self, X):
         """Initialization of all pixels, sets X as an array of data in vector form (PxD)
@@ -32,9 +28,12 @@ class KMeans:
                     the last dimension
         """
         if len(X.shape) == 2:
-            self.X = X.astype('float64')
+            self.X = X
         else:
-            self.X = X.reshape((X.shape[0] * X.shape[1], X.shape[2])).astype('float64')
+            self.X = X.reshape((X.shape[0] * X.shape[1], X.shape[2]))
+
+        if self.X.dtype != np.float64:
+            self.X = self.X.astype('float64')
 
 
     def _init_options(self, options=None):
@@ -58,10 +57,6 @@ class KMeans:
 
         # If your methods need any other prameter you can add it to the options dictionary
         self.options = options
-
-        #############################################################
-        ##  THIS FUNCTION CAN BE MODIFIED FROM THIS POINT, if needed
-        #############################################################
 
 
     def _init_centroids(self):
@@ -95,7 +90,7 @@ class KMeans:
         Calculates coordinates of centroids based on the coordinates of all the points assigned to the centroid
         """
         
-        self.old_centroids[:] = self.centroids
+        self.old_centroids = np.array(self.centroids)
         self.centroids = np.array([np.mean(self.X[self.labels == k], axis=0) for k in range(self.K)])
 
 
