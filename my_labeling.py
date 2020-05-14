@@ -13,12 +13,16 @@ import cv2
 
 
 def get_color_predictions(images, k):
-    preds = np.empty((len(images), k), dtype='<U8')
+    # preds = np.empty((len(images), k), dtype='<U8')
+    preds = []
 
     for ix, input in enumerate(images):
-        kms = km.KMeans(input, k, {"km_init": "random"})
+        # S'ha observat que el nombre d'iteracions necessàries era proper a k*5. 
+        # Si el sobrepassa, és que no està essent eficient
+        kms = km.KMeans(input, 2, {"km_init": "kmeans++", "max_iter": k*5})
+        kms.find_bestK(k)
         kms.fit()
-        preds[ix] = km.get_colors(kms.centroids)
+        preds.append(km.get_colors(kms.centroids))
 
     return preds
 
@@ -52,7 +56,7 @@ def retrieval_combined(images, color_labels, shape_labels, color_keyword, shape_
     # shape_labels = shape_labels[args][::-1]
     mask_color = []
 
-    for i in range(color_labels.shape[0]):
+    for i in range(len(color_labels)):
         if set(color_keyword).issubset(color_labels[i]) or set(color_labels[i]).issubset(color_keyword):
             mask_color.append(i)
 
@@ -64,7 +68,7 @@ def retrieval_combined(images, color_labels, shape_labels, color_keyword, shape_
 
 def kmean_statistics(images, kmax):
     for ix, input in enumerate(images):
-        kms = km.KMeans(input, 2, {"km_init": "random"})
+        kms = km.KMeans(input, 2, {"km_init": "kmeans++", "max_iter": kmax*5})
         local_scores = []
         local_iterations = []
 
@@ -108,11 +112,11 @@ def get_shape_accuracy(predicted, ground_truth):
 def get_color_accuracy(predicted, ground_truth):
     sumup = 0
 
-    for i in range(predicted.shape[0]):
+    for i in range(len(predicted)):
         if set(predicted[i].tolist()).issubset(ground_truth[i]) or set(ground_truth[i]).issubset(predicted[i].tolist()):
             sumup += 1
 
-    return sumup / predicted.shape[0] * 100
+    return sumup / len(predicted) * 100
 
 
 if __name__ == '__main__':
@@ -125,14 +129,14 @@ if __name__ == '__main__':
     classes = list(set(list(train_class_labels) + list(test_class_labels)))
 
     
-    predicted_color_labels = get_color_predictions(test_imgs, 2)
+    predicted_color_labels = get_color_predictions(test_imgs, 6)
     # preds = retrieval_by_color(test_imgs, predicted_color_labels, predicted_color_probs, ["Purple", "Black"] )
-    # predicted_shape_labels = get_shape_predictions(train_imgs, test_imgs, train_class_labels)
+    predicted_shape_labels = get_shape_predictions(train_imgs, test_imgs, train_class_labels, 3)
     # preds = retrieval_by_shape(test_imgs, predicted_shape_labels, "dresses")
-    # preds = retrieval_combined(test_imgs, predicted_color_labels, predicted_shape_labels, ["Blue", "White"], "Socks")
-    # visualize_retrieval(preds, 10)
+    preds = retrieval_combined(test_imgs, predicted_color_labels, predicted_shape_labels, ["Green", "White"], "Shirts")
+    visualize_retrieval(preds, 10)
 
-    # print(get_color_accuracy(predicted_color_labels, test_color_labels))
+    print(get_color_accuracy(predicted_color_labels, test_color_labels))
 
-    kmean_statistics(train_imgs, 10)
+    # kmean_statistics(train_imgs, 10)
     # knn_statistics(train_imgs, test_imgs, train_class_labels, test_class_labels, 10)

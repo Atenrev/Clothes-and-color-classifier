@@ -73,12 +73,26 @@ class KMeans:
             self.centroids = self.centroids[:self.K]
         elif self.options['km_init'].lower() == 'random':
             self.centroids = np.random.rand(self.K, self.X.shape[1]) * 255
+        # Funciona bé però pot portar a casos amb empty clusters
         elif self.options['km_init'].lower() == 'sharding':
             attributes_sum = np.sum(self.X, 1)
             ordering_indexes = np.argsort(attributes_sum)
             ordered_x = self.X[ordering_indexes]
-            
-            pass
+            splits = np.array_split(ordered_x, self.K)
+            self.centroids = np.empty((self.K, self.X.shape[1]), dtype='float64')
+
+            for p in range(self.K):
+                self.centroids[p] = np.mean(splits[p], 0)
+        elif self.options['km_init'].lower() == 'kmeans++':
+            shape = self.X.shape[0]
+            self.centroids = np.empty((self.K, self.X.shape[1]), dtype='float64')
+            self.centroids[0] = self.X[np.random.randint(shape), :]
+
+            for k in range(1, self.K):
+                # distances = np.empty((shape))
+                max_dist = np.inf
+                distances = np.amin(distance(self.X, self.centroids), axis=1)
+                self.centroids[k] = self.X[np.argmax(distances), :] 
 
         self.old_centroids = np.empty_like(self.centroids)
 
@@ -100,7 +114,10 @@ class KMeans:
         """
         
         self.old_centroids = np.array(self.centroids)
-        self.centroids = np.array([np.mean(self.X[self.labels == k], axis=0) for k in range(self.K)])
+
+        for k in range(self.K):
+            if np.sum(self.labels == k) != 0:
+                self.centroids[k] = np.mean(self.X[self.labels == k], axis=0)
 
 
     def converges(self):
