@@ -6,6 +6,7 @@ import math
 import operator
 from scipy.spatial.distance import cdist
 
+
 class KNN:
     def __init__(self, train_data, labels):
         self._init_train(train_data)
@@ -19,7 +20,13 @@ class KNN:
         :return: assigns the train set to the matrix self.train_data shaped as PxD (P points in a D dimensional space)
         """
 
-        self.train_data = train_data.reshape((train_data.shape[0], 14400)).astype('float64')
+        if (len(train_data.shape) == 3):
+            self.train_data = train_data.reshape(
+                (train_data.shape[0], train_data.shape[1]*train_data.shape[2])).astype('float64')
+        else:
+            # Calculate the RGB mean
+            self.train_data = np.mean(train_data, axis=3).reshape(
+                (train_data.shape[0], train_data.shape[1]*train_data.shape[2])).astype('float64')
 
 
     def get_k_neighbours(self, test_data, k):
@@ -30,7 +37,15 @@ class KNN:
         :return: the matrix self.neighbors is created (NxK)
                  the ij-th entry is the j-th nearest train point to the i-th test point
         """
-        test_data = test_data.reshape((test_data.shape[0], 14400)).astype('float64')
+
+        if (len(test_data.shape) == 3):
+            test_data = test_data.reshape(
+                (test_data.shape[0], test_data.shape[1]*test_data.shape[2])).astype('float64')
+        else:
+            # Calculate the RGB mean
+            test_data = np.mean(test_data, axis=3).reshape(
+                (test_data.shape[0], test_data.shape[1]*test_data.shape[2])).astype('float64')
+
         distances = cdist(test_data, self.train_data).argsort(kind='mergesort')[:,:k]
         self.neighbors = self.labels[distances]
 
@@ -44,11 +59,19 @@ class KNN:
                 2nd array For each of the rows in self.neighbors gets the % of votes for the winning class
         """
         
+        # classes = []
+        # for image in self.neighbors:
+        #     _, indices, count = np.unique(image, return_index=True, return_counts=True)
+        #     sorted_indices = np.sort(indices)
+        #     count = count[indices.argsort()]
+        #     classes.append(image[sorted_indices[np.argmax(count)]])
+
         classes, indices = np.unique(self.neighbors, return_inverse=True)
-        count = np.apply_along_axis(np.bincount, 
-            1, indices.reshape(self.neighbors.shape), None, np.max(indices) + 1)
-        classes = classes[np.argmax(count, 1)]
-        return classes
+        indices_rs = indices.reshape(self.neighbors.shape)
+        count = np.apply_along_axis(np.bincount, 1, indices_rs, None, np.max(indices) + 1)
+        # count = count[indices_rs]
+        classes = classes[np.argmax(count, 1)].astype('<U8')
+        return np.array(classes)
 
 
     def predict(self, test_data, k):

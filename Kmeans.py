@@ -2,7 +2,10 @@ __authors__ = ['1531206','1456135', '1533031']
 __group__ = 'GrupDM12'
 
 import numpy as np
+import pandas
 import utils
+import matplotlib.pyplot as plt
+from sklearn.metrics import silhouette_score
 
 
 class KMeans:
@@ -44,15 +47,15 @@ class KMeans:
         """
         if options == None:
             options = {}
-        if not 'km_init' in options:
+        if 'km_init' not in options:
             options['km_init'] = 'first'
-        if not 'verbose' in options:
+        if 'verbose' not in options:
             options['verbose'] = False
-        if not 'tolerance' in options:
+        if 'tolerance' not in options:
             options['tolerance'] = 0
-        if not 'max_iter' in options:
+        if 'max_iter' not in options:
             options['max_iter'] = np.inf
-        if not 'fitting' in options:
+        if 'fitting' not in options:
             options['fitting'] = 'WCD'  #within class distance.
 
         # If your methods need any other prameter you can add it to the options dictionary
@@ -68,9 +71,14 @@ class KMeans:
             _, idx = np.unique(self.X, return_index=True, axis=0)
             self.centroids = self.X[np.sort(idx)]
             self.centroids = self.centroids[:self.K]
-        else:
-            self.centroids = np.random.rand(self.K, self.X.shape[1])
-            self.old_centroids = np.random.rand(self.K, self.X.shape[1])
+        elif self.options['km_init'].lower() == 'random':
+            self.centroids = np.random.rand(self.K, self.X.shape[1]) * 255
+        elif self.options['km_init'].lower() == 'sharding':
+            attributes_sum = np.sum(self.X, 1)
+            ordering_indexes = np.argsort(attributes_sum)
+            ordered_x = self.X[ordering_indexes]
+            
+            pass
 
         self.old_centroids = np.empty_like(self.centroids)
 
@@ -83,6 +91,7 @@ class KMeans:
         
         distances = distance(self.X, self.centroids)
         self.labels = np.argmin(distances, axis=1)
+        self.labels_distances = np.amin(distances, axis=1)
 
 
     def get_centroids(self):
@@ -122,16 +131,34 @@ class KMeans:
          returns the whithin class distance of the current clustering
         """
 
-        C = self.centroids[self.labels]
-        dist = (self.X - C)
-        return np.mean((dist * dist).sum(1))
+        # C = self.centroids[self.labels]
+        # dist = (self.X - C)
+        # return np.mean((dist * dist).sum(1))
+        return np.mean(self.labels_distances)
+
+
+    def silhouette_score(self, K):
+        """
+         returns the whithin class distance of the current clustering
+        """
+
+        # C = self.centroids[self.labels]
+        # wcdist = (self.X - C)
+        # wcdist = (wcdist * wcdist).sum(1)
+
+        # uff = np.concatenate([self.X[self.labels == k] for k in range(K)])
+        # icdist = uff[:,:] - uff[:, :]
+        # icdist = (icdist * icdist).sum(1)
+
+        # return np.mean(wcdist / icdist)
+        return silhouette_score(self.X, self.labels)
         
 
     def find_bestK(self, max_K):
         """
          sets the best k anlysing the results up to 'max_K' clusters
         """
-        
+
         best_k = self.K
        
         self.K = 2
@@ -152,6 +179,34 @@ class KMeans:
         self.K = best_k
 
 
+    def plot_bestK(self, max_K):
+        """
+         Plot the process of finding the best K
+        """
+        
+        scores = []
+
+        best_k = self.K
+       
+        self.K = 2
+        self.fit()
+        score = silhouette_score(self.X, self.labels, metric = 'precomputed')
+        scores.append(score)
+
+        for k in range(3, max_K+1):
+            self.K = k
+            self.fit()
+            new_score = silhouette_score(self.X, self.labels, metric = 'precomputed')
+            score = new_score
+            scores.append(score)
+        
+        self.K = best_k
+        series = pandas.Series(scores, index=list(range(2,max_K+1)))
+        series.plot()
+        plt.show()
+
+
+
 
 
 def distance(X, C):
@@ -167,7 +222,7 @@ def distance(X, C):
     """
     
     dist = X[:, :, None] - C[:, :, None].T
-    return np.sqrt((dist * dist).sum(1))
+    return (dist * dist).sum(1)
 
 
 def get_colors(centroids):
@@ -178,7 +233,11 @@ def get_colors(centroids):
 
     Returns:
         lables: list of K labels corresponding to one of the 11 basic colors
+        color_probs: color probabilities
     """
     
     probs = utils.get_color_prob(centroids)
+    # probs_max_args = np.argsort(probs.max(1)[::-1])
+    # color_probs = probs.max(1)[probs_max_args]
+    # probs_argmax = probs.argmax(1)[probs_max_args]
     return utils.colors[probs.argmax(1)]

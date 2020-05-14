@@ -2,3 +2,4 @@ numpy
 pickle
 scipy
 scikit-image
+opencv
