@@ -6,6 +6,9 @@ import pandas
 import utils
 import matplotlib.pyplot as plt
 from sklearn.metrics import silhouette_score
+from sklearn.metrics.pairwise import euclidean_distances
+from scipy.spatial.distance import pdist
+import numpy_indexed as npi
 
 
 class KMeans:
@@ -22,7 +25,6 @@ class KMeans:
         self._init_X(X)
         self._init_options(options)  # DICT options
 
-
     def _init_X(self, X):
         """Initialization of all pixels, sets X as an array of data in vector form (PxD)
             Args:
@@ -37,7 +39,6 @@ class KMeans:
 
         if self.X.dtype != np.float64:
             self.X = self.X.astype('float64')
-
 
     def _init_options(self, options=None):
         """
@@ -56,11 +57,11 @@ class KMeans:
         if 'max_iter' not in options:
             options['max_iter'] = np.inf
         if 'fitting' not in options:
-            options['fitting'] = 'WCD'  #within class distance.
+            options['fitting'] = 'WCD'
+        if 'threshold' not in options:
+            options['threshold']  = 0.9
 
-        # If your methods need any other prameter you can add it to the options dictionary
         self.options = options
-
 
     def _init_centroids(self):
         """
@@ -89,13 +90,10 @@ class KMeans:
             self.centroids[0] = self.X[np.random.randint(shape), :]
 
             for k in range(1, self.K):
-                # distances = np.empty((shape))
-                max_dist = np.inf
                 distances = np.amin(distance(self.X, self.centroids), axis=1)
                 self.centroids[k] = self.X[np.argmax(distances), :] 
 
         self.old_centroids = np.empty_like(self.centroids)
-
 
     def get_labels(self):
         """        
@@ -106,7 +104,6 @@ class KMeans:
         distances = distance(self.X, self.centroids)
         self.labels = np.argmin(distances, axis=1)
         self.labels_distances = np.amin(distances, axis=1)
-
 
     def get_centroids(self):
         """
@@ -119,14 +116,12 @@ class KMeans:
             if np.sum(self.labels == k) != 0:
                 self.centroids[k] = np.mean(self.X[self.labels == k], axis=0)
 
-
     def converges(self):
         """
         Checks if there is a difference between current and old centroids
         """
         
         return np.allclose(self.centroids, self.old_centroids, self.options["tolerance"])
-
 
     def fit(self):
         """
@@ -142,35 +137,81 @@ class KMeans:
             self.get_centroids()
             self.num_iter += 1
 
-
-    def whitinClassDistance(self):
+    def within_class_distance(self):
         """
          returns the whithin class distance of the current clustering
         """
 
-        # C = self.centroids[self.labels]
-        # dist = (self.X - C)
-        # return np.mean((dist * dist).sum(1))
+        clusters = npi.group_by(self.labels).split(self.X)
+        sumup = 0.0
+
+        for i in range(self.K):
+             sumup += np.mean(euclidean_distances(clusters[i], clusters[i]))
+
+        return sumup
+
+    def within_class_distance_fast(self):
+        """
+         returns a faster variant of the whithin class distance of the current clustering
+        """
+
         return np.mean(self.labels_distances)
 
-
-    def silhouette_score(self, K):
+    def inter_class_distance(self):
         """
-         returns the whithin class distance of the current clustering
+         returns the inter class distance of the current clustering
         """
 
-        # C = self.centroids[self.labels]
-        # wcdist = (self.X - C)
-        # wcdist = (wcdist * wcdist).sum(1)
+        clusters = npi.group_by(self.labels).split(self.X)
+        sumup = 0.0
 
-        # uff = np.concatenate([self.X[self.labels == k] for k in range(K)])
-        # icdist = uff[:,:] - uff[:, :]
-        # icdist = (icdist * icdist).sum(1)
+        for i in range(self.K):
+            for j in range(i, self.K):
+                if i != j:
+                    sumup += np.mean(euclidean_distances(clusters[i], clusters[j]))
 
-        # return np.mean(wcdist / icdist)
-        return silhouette_score(self.X, self.labels)
+        return sumup
+
+    def inter_centroids_distance(self):
+        """
+         returns the inter centroids distance of the current clustering
+        """
+
+        return np.mean(euclidean_distances(self.centroids, self.centroids))
+
+    def davis_bouldin_score(self):
+        """
+         returns the davis bouldin score of the current clustering
+        """
+
+        sumup = 0
+
+        for i in range(self.K):
+            for j in range(i, self.K):
+                if i != j:
+                    dist = self.centroids[i] - self.centroids[j]
+                    sumup += (self.labels_distances[i] + self.labels_distances[j]) / (dist * dist).sum()
         
+        return sumup / self.K
 
+    def silhouette_score(self):
+        """
+         returns the silhouette score of the current clustering
+        """
+
+        a = self.within_class_distance()
+        b = self.inter_class_distance()
+        return (b-a) / max(a,b)
+
+    def fisher_score(self):
+        """
+         returns the fisher score of the current clustering
+        """
+        
+        a = self.within_class_distance()
+        b = self.inter_class_distance()
+        return a/b
+        
     def find_bestK(self, max_K):
         """
          sets the best k anlysing the results up to 'max_K' clusters
@@ -180,50 +221,49 @@ class KMeans:
        
         self.K = 2
         self.fit()
-        wcd = self.whitinClassDistance()
+
+        if self.options['fitting'] == "WCD":
+            score = self.within_class_distance_fast()
+        elif self.options['fitting'] == "ICD":
+            score = self.inter_class_distance()
+        elif self.options['fitting'] == "DB":
+            score = self.davis_bouldin_score()
+        elif self.options['fitting'] == "fisher":
+            score = self.fisher_score()
+        elif self.options['fitting'] == "silhouette":
+            score = self.silhouette_score()
 
         for k in range(3, max_K+1):
             self.K = k
             self.fit()
-            new_wcd = self.whitinClassDistance()
 
-            if new_wcd/wcd >= 0.8 or k == max_K:
-                best_k = k-1
-                break
+            if self.options['fitting'] == "WCD":
+                new_score = self.within_class_distance_fast()
+            elif self.options['fitting'] == "ICD":
+                new_score = self.inter_class_distance()
+            elif self.options['fitting'] == "DB":
+                new_score = self.davis_bouldin_score()
+            elif self.options['fitting'] == "fisher":
+                new_score = self.fisher_score()
+            elif self.options['fitting'] == "silhouette":
+                new_score = self.silhouette_score()
 
-            wcd = new_wcd
-        
-        self.K = best_k
+            if self.options['fitting'] == "silhouette":
+                if new_score < score or k == max_K:
+                    best_k = k-1
+                    break
+            elif self.options['fitting'] == "ICD":
+                if (new_score/score - 1) < self.options['threshold'] or k == max_K:
+                    best_k = k-1
+                    break
+            else:
+                if (1 - new_score/score) < self.options['threshold'] or k == max_K:
+                    best_k = k-1
+                    break
 
-
-    def plot_bestK(self, max_K):
-        """
-         Plot the process of finding the best K
-        """
-        
-        scores = []
-
-        best_k = self.K
-       
-        self.K = 2
-        self.fit()
-        score = silhouette_score(self.X, self.labels, metric = 'precomputed')
-        scores.append(score)
-
-        for k in range(3, max_K+1):
-            self.K = k
-            self.fit()
-            new_score = silhouette_score(self.X, self.labels, metric = 'precomputed')
             score = new_score
-            scores.append(score)
         
         self.K = best_k
-        series = pandas.Series(scores, index=list(range(2,max_K+1)))
-        series.plot()
-        plt.show()
-
-
-
 
 
 def distance(X, C):

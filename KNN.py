@@ -69,7 +69,6 @@ class KNN:
         classes, indices = np.unique(self.neighbors, return_inverse=True)
         indices_rs = indices.reshape(self.neighbors.shape)
         count = np.apply_along_axis(np.bincount, 1, indices_rs, None, np.max(indices) + 1)
-        # count = count[indices_rs]
         classes = classes[np.argmax(count, 1)].astype('<U8')
         return np.array(classes)
 
