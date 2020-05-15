@@ -68,7 +68,7 @@ def retrieval_combined(images, color_labels, shape_labels, color_keyword, shape_
     return images[idx]
 
 
-def kmean_statistics(images, kmax=10, nsamples=20):
+def kmean_statistics(images, kmax=10, nsamples=100):
     global_times = np.zeros((kmax-1))
     global_scores = np.zeros((kmax-1))
     global_iterations = np.zeros((kmax-1))
@@ -83,9 +83,9 @@ def kmean_statistics(images, kmax=10, nsamples=20):
             start = time.time()
             kms.K = k
             kms.fit()
+            score = kms.fisher_score()
             end = time.time()
             elapsed = end - start
-            score = kms.fisher_score()
             global_times[k-2] += elapsed
             global_scores[k-2] += score
             global_iterations[k-2] += kms.num_iter
