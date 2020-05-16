@@ -22,8 +22,8 @@ class KMeans:
             """
         self.num_iter = 0
         self.K = K
+        self._init_options(options)
         self._init_X(X)
-        self._init_options(options)  # DICT options
 
     def _init_X(self, X):
         """Initialization of all pixels, sets X as an array of data in vector form (PxD)
@@ -36,6 +36,10 @@ class KMeans:
             self.X = X
         else:
             self.X = X.reshape((X.shape[0] * X.shape[1], X.shape[2]))
+
+        # Delete unnecessary filthy background        
+        indexes = np.where(np.mean(self.X, 1) < self.options['background_mask'])
+        self.X = self.X[indexes[0]]
 
         if self.X.dtype != np.float64:
             self.X = self.X.astype('float64')
@@ -60,6 +64,8 @@ class KMeans:
             options['fitting'] = 'WCD'
         if 'threshold' not in options:
             options['threshold']  = 0.9
+        if 'background_mask' not in options:
+            options['background_mask']  = 250
 
         self.options = options
 
@@ -113,7 +119,7 @@ class KMeans:
         self.old_centroids = np.array(self.centroids)
 
         for k in range(self.K):
-            if np.sum(self.labels == k) != 0:
+            if (self.labels == k).size > 0:
                 self.centroids[k] = np.mean(self.X[self.labels == k], axis=0)
 
     def converges(self):
@@ -143,9 +149,9 @@ class KMeans:
         """
 
         clusters = npi.group_by(self.labels).split(self.X)
-        sumup = 0.0
-
-        for i in range(self.K):
+        sumup = 1.0
+        
+        for i in range(len(clusters)):
              sumup += np.mean(euclidean_distances(clusters[i], clusters[i]))
 
         return sumup
@@ -163,10 +169,10 @@ class KMeans:
         """
 
         clusters = npi.group_by(self.labels).split(self.X)
-        sumup = 0.0
+        sumup = 1.0
 
-        for i in range(self.K):
-            for j in range(i, self.K):
+        for i in range(len(clusters)):
+            for j in range(i, len(clusters)):
                 if i != j:
                     sumup += np.mean(euclidean_distances(clusters[i], clusters[j]))
 
@@ -184,7 +190,7 @@ class KMeans:
          returns the davis bouldin score of the current clustering
         """
 
-        sumup = 0
+        sumup = 1
 
         for i in range(self.K):
             for j in range(i, self.K):
@@ -219,11 +225,11 @@ class KMeans:
 
         best_k = self.K
        
-        self.K = 2
+        self.K = 1
         self.fit()
 
         if self.options['fitting'] == "WCD":
-            score = self.within_class_distance_fast()
+            score = self.within_class_distance()
         elif self.options['fitting'] == "ICD":
             score = self.inter_class_distance()
         elif self.options['fitting'] == "DB":
@@ -231,14 +237,14 @@ class KMeans:
         elif self.options['fitting'] == "fisher":
             score = self.fisher_score()
         elif self.options['fitting'] == "silhouette":
-            score = self.silhouette_score()
+            score = silhouette_score(self.X, self.labels)
 
-        for k in range(3, max_K+1):
+        for k in range(2, max_K+1):
             self.K = k
             self.fit()
 
             if self.options['fitting'] == "WCD":
-                new_score = self.within_class_distance_fast()
+                new_score = self.within_class_distance()
             elif self.options['fitting'] == "ICD":
                 new_score = self.inter_class_distance()
             elif self.options['fitting'] == "DB":
@@ -246,7 +252,7 @@ class KMeans:
             elif self.options['fitting'] == "fisher":
                 new_score = self.fisher_score()
             elif self.options['fitting'] == "silhouette":
-                new_score = self.silhouette_score()
+                new_score = silhouette_score(self.X, self.labels)
 
             if self.options['fitting'] == "silhouette":
                 if new_score < score or k == max_K:
@@ -254,11 +260,17 @@ class KMeans:
                     break
             elif self.options['fitting'] == "ICD":
                 if (new_score/score - 1) < self.options['threshold'] or k == max_K:
-                    best_k = k-1
+                    if k == max_K:
+                        best_k = k
+                    else:
+                        best_k = k-1
                     break
             else:
                 if (1 - new_score/score) < self.options['threshold'] or k == max_K:
-                    best_k = k-1
+                    if k == max_K:
+                        best_k = k
+                    else:
+                        best_k = k-1
                     break
 
             score = new_score

@@ -21,12 +21,12 @@ def get_color_predictions(images, max_k):
         # S'ha observat que el nombre d'iteracions necessàries era proper a k*5. 
         # Si el sobrepassa, és que no està essent eficient
         # La tolerància podria ser 0.05 però no val la pena
-        kms = km.KMeans(input, 2, {"km_init": "kmeans++", "max_iter": max_k*5, "threshold": 0.1, "fitting": "WCD"})
+        kms = km.KMeans(input, 2, {"km_init": "kmeans++", "max_iter": max_k*5, "threshold": 0.2, "fitting": "DB", "tolerance": 0.1, "background_mask": 250})
         kms.find_bestK(max_k)
         kms.fit()
         preds.append(km.get_colors(kms.centroids))
 
-    return preds
+    return np.array(preds)
 
 
 def get_shape_predictions(train_images, test_images, train_labels, k):
@@ -41,7 +41,7 @@ def retrieval_by_color(images, labels, keywords):
     idx = []
 
     for i in range(labels.shape[0]):
-        if set(keywords).issubset(labels[i]) or set(labels[i]).issubset(keywords):
+        if len(set(keywords) - set(labels[i])) / len(set(keywords)) == 0:
             idx.append(i)
 
     return images[idx]
@@ -59,13 +59,16 @@ def retrieval_combined(images, color_labels, shape_labels, color_keyword, shape_
     mask_color = []
 
     for i in range(len(color_labels)):
-        if set(color_keyword).issubset(color_labels[i]) or set(color_labels[i]).issubset(color_keyword):
+        if len(set(color_keyword) - set(color_labels[i])) / len(set(color_keyword)) == 0:
             mask_color.append(i)
 
     mask_shape = np.where(shape_keyword == shape_labels)
     idx = np.intersect1d(np.array(mask_color), mask_shape)
     
-    return images[idx]
+    if len(idx) > 0:
+        return idx, images[idx]
+    else:
+        return None, None
 
 
 def kmean_statistics(images, kmax=10, nsamples=100):
@@ -152,8 +155,10 @@ def get_color_accuracy(predicted, ground_truth):
     sumup = 0.0
 
     for i in range(len(predicted)):
-        if set(predicted[i].tolist()).issubset(ground_truth[i]) or set(ground_truth[i]).issubset(predicted[i].tolist()):
-            sumup += 1
+        pred_set = set(predicted[i].tolist())
+        sumup += 1 - len(pred_set - set(ground_truth[i])) / len(pred_set)
+        # if set(predicted[i].tolist()).issubset(ground_truth[i]) or set(ground_truth[i]).issubset(predicted[i].tolist()):
+        #     sumup += 1
 
     return sumup / len(predicted) * 100
 
@@ -166,34 +171,45 @@ if __name__ == '__main__':
     #List with all the existant classes
     classes = list(set(list(train_class_labels) + list(test_class_labels)))
 
-    max_data = 100
-    images_to_show = 16
+    max_data = 1000
+    images_to_show = 12
     max_k = 7
     knn_k = 3
-    color_query = ["Blue", "White"]
+    color_query = ["White", "Black"]
     shape_query = "Shirts"
+
+    train_imgs = train_imgs[:max_data]
+    test_imgs = test_imgs[:max_data]
+    test_class_labels = test_class_labels[:max_data]
+    test_color_labels = test_color_labels[:max_data]
 
     predicted_color_labels = get_color_predictions(test_imgs, max_k)
     # preds = retrieval_by_color(test_imgs, predicted_color_labels, ["Purple", "Black"] )
     predicted_shape_labels = get_shape_predictions(train_imgs, test_imgs, train_class_labels, knn_k)
     # preds = retrieval_by_shape(test_imgs, predicted_shape_labels, "dresses")
 
-    preds = retrieval_combined(test_imgs, predicted_color_labels, predicted_shape_labels, color_query, shape_query)
+    indexes, preds = retrieval_combined(test_imgs, predicted_color_labels, predicted_shape_labels, color_query, shape_query)
 
-    title = "Query for " + "".join(color_query) + " " + shape_query
-    names = []
-    corrects = []
-    for i in range(images_to_show):
-        names.append("Predicted: {} {}\nObtained: {} {}".format(
-            "".join(predicted_color_labels[i].tolist()), shape_query, "".join(test_color_labels[i]), test_class_labels[i]))
+    if indexes is not None and False:
+        test_class_labels = test_class_labels[indexes]
+        test_color_labels = test_color_labels[indexes]
+        predicted_color_labels = predicted_color_labels[indexes]
+        predicted_shape_labels = predicted_shape_labels[indexes]
 
-        if set(predicted_color_labels[i].tolist()).issubset(test_color_labels[i]) or set(test_color_labels[i]).issubset(predicted_color_labels[i].tolist()) \
-            and predicted_shape_labels[i] == test_class_labels[i]:
-            corrects.append(True)
-        else:
-            corrects.append(False)
+        title = "Query for " + "".join(color_query) + " " + shape_query
+        names = []
+        corrects = []
+        for i in range(min(images_to_show, len(preds))):
+            names.append("Predicted: {} {}\nObtained: {} {}".format(
+                "".join(predicted_color_labels[i].tolist()), shape_query, "".join(test_color_labels[i]), test_class_labels[i]))
 
-    visualize_retrieval(preds, images_to_show, names, corrects, title)
+            if set(predicted_color_labels[i].tolist()).issubset(test_color_labels[i]) or set(test_color_labels[i]).issubset(predicted_color_labels[i].tolist()) \
+                and predicted_shape_labels[i] == test_class_labels[i]:
+                corrects.append(True)
+            else:
+                corrects.append(False)
+
+        visualize_retrieval(preds, images_to_show, names, corrects, title)
 
     print(get_color_accuracy(predicted_color_labels, test_color_labels))
     print(get_shape_accuracy(predicted_shape_labels, test_class_labels))
