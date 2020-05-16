@@ -1,6 +1,5 @@
 numpy
 numpy-indexed
-pickle
 scipy
 scikit-image
 opencv

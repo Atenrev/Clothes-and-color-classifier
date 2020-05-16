@@ -21,7 +21,7 @@ def get_color_predictions(images, max_k):
         # S'ha observat que el nombre d'iteracions necessàries era proper a k*5. 
         # Si el sobrepassa, és que no està essent eficient
         # La tolerància podria ser 0.05 però no val la pena
-        kms = km.KMeans(input, 2, {"km_init": "kmeans++", "max_iter": max_k*5, "threshold": 0.2, "fitting": "DB", "tolerance": 0.1, "background_mask": 250})
+        kms = km.KMeans(input, 1, {"km_init": "kmeans++", "max_iter": max_k*5, "threshold": 0.35, "fitting": "DB", "tolerance": 0.1, "background_mask": 250})
         kms.find_bestK(max_k)
         kms.fit()
         preds.append(km.get_colors(kms.centroids))
@@ -71,36 +71,36 @@ def retrieval_combined(images, color_labels, shape_labels, color_keyword, shape_
         return None, None
 
 
-def kmean_statistics(images, kmax=10, nsamples=100):
+def kmean_statistics(images, options, kmax=10, nsamples=250):
     global_times = np.zeros((kmax-1))
     global_scores = np.zeros((kmax-1))
     global_iterations = np.zeros((kmax-1))
 
     for ix, input in enumerate(images[:nsamples]):
-        kms = km.KMeans(input, 2, {"km_init": "kmeans++", "threshold": 0.8, "fitting": "WCD"})
         local_times = []
         local_scores = []
         local_iterations = []
+        kms = km.KMeans(input, 1, options)
 
-        for k in range(2, kmax+1):
+        for k in range(1, kmax+1):
             start = time.time()
             kms.K = k
             kms.fit()
-            score = kms.fisher_score()
+            score = kms.perform_score()
             end = time.time()
             elapsed = end - start
             global_times[k-2] += elapsed
             global_scores[k-2] += score
             global_iterations[k-2] += kms.num_iter
 
-            local_scores.append(score)
-            local_iterations.append(kms.num_iter)
-            local_times.append(elapsed)
-            print("Results for image " + str(ix) + " with k=" + str(k)) 
-            print("Score: " + str(score))
-            print("Iterations needed: " + str(kms.num_iter))
-            print("Elapsed time: " + str(elapsed))
-            print("")
+            # local_scores.append(score)
+            # local_iterations.append(kms.num_iter)
+            # local_times.append(elapsed)
+            # print("Results for image " + str(ix) + " with k=" + str(k)) 
+            # print("Score: " + str(score))
+            # print("Iterations needed: " + str(kms.num_iter))
+            # print("Elapsed time: " + str(elapsed))
+            # print("")
             # visualize_k_means(kms, input.shape)
         
         # score_series = pd.Series(local_scores, index=list(range(2,kmax+1)), name="Score")
@@ -117,13 +117,13 @@ def kmean_statistics(images, kmax=10, nsamples=100):
     global_iterations /= images.shape[0]
     global_times /= images.shape[0]
 
-    score_series = pd.Series(global_scores, index=list(range(2,kmax+1)), name="Score")
+    score_series = pd.Series(global_scores, index=list(range(1,kmax+1)), name="Score")
     score_series.plot(legend=True)
     plt.show()
-    iterations_series = pd.Series(global_iterations, index=list(range(2,kmax+1)), name="Iterations")
+    iterations_series = pd.Series(global_iterations, index=list(range(1,kmax+1)), name="Iterations")
     iterations_series.plot(legend=True)
     plt.show()
-    time_series = pd.Series(global_times, index=list(range(2,kmax+1)), name="Time")
+    time_series = pd.Series(global_times, index=list(range(1,kmax+1)), name="Time")
     time_series.plot(legend=True)
     plt.show()
 
@@ -142,6 +142,7 @@ def knn_statistics(train_images, test_images, train_labels, test_labels, kmax):
 
     acc_series = pd.Series(acc_list, index=list(range(2,kmax)), name="Accuracy")
     acc_series.plot(legend=True)
+    plt.show()
     time_series = pd.Series(times_list, index=list(range(2,kmax)), name="Time")
     time_series.plot(legend=True)
     plt.show()
@@ -183,33 +184,35 @@ if __name__ == '__main__':
     test_class_labels = test_class_labels[:max_data]
     test_color_labels = test_color_labels[:max_data]
 
-    predicted_color_labels = get_color_predictions(test_imgs, max_k)
+    kmean_statistics(test_imgs, {"km_init": "kmeans++", "threshold": 0.35, "fitting": "fisher"}, 10, 100)
+
+    # predicted_color_labels = get_color_predictions(test_imgs, max_k)
     # preds = retrieval_by_color(test_imgs, predicted_color_labels, ["Purple", "Black"] )
-    predicted_shape_labels = get_shape_predictions(train_imgs, test_imgs, train_class_labels, knn_k)
+    # predicted_shape_labels = get_shape_predictions(train_imgs, test_imgs, train_class_labels, knn_k)
     # preds = retrieval_by_shape(test_imgs, predicted_shape_labels, "dresses")
 
-    indexes, preds = retrieval_combined(test_imgs, predicted_color_labels, predicted_shape_labels, color_query, shape_query)
+    # indexes, preds = retrieval_combined(test_imgs, predicted_color_labels, predicted_shape_labels, color_query, shape_query)
 
-    if indexes is not None and False:
-        test_class_labels = test_class_labels[indexes]
-        test_color_labels = test_color_labels[indexes]
-        predicted_color_labels = predicted_color_labels[indexes]
-        predicted_shape_labels = predicted_shape_labels[indexes]
+    # if indexes is not None and False:
+    #     test_class_labels = test_class_labels[indexes]
+    #     test_color_labels = test_color_labels[indexes]
+    #     predicted_color_labels = predicted_color_labels[indexes]
+    #     predicted_shape_labels = predicted_shape_labels[indexes]
 
-        title = "Query for " + "".join(color_query) + " " + shape_query
-        names = []
-        corrects = []
-        for i in range(min(images_to_show, len(preds))):
-            names.append("Predicted: {} {}\nObtained: {} {}".format(
-                "".join(predicted_color_labels[i].tolist()), shape_query, "".join(test_color_labels[i]), test_class_labels[i]))
+    #     title = "Query for " + "".join(color_query) + " " + shape_query
+    #     names = []
+    #     corrects = []
+    #     for i in range(min(images_to_show, len(preds))):
+    #         names.append("Predicted: {} {}\nObtained: {} {}".format(
+    #             "".join(predicted_color_labels[i].tolist()), shape_query, "".join(test_color_labels[i]), test_class_labels[i]))
 
-            if set(predicted_color_labels[i].tolist()).issubset(test_color_labels[i]) or set(test_color_labels[i]).issubset(predicted_color_labels[i].tolist()) \
-                and predicted_shape_labels[i] == test_class_labels[i]:
-                corrects.append(True)
-            else:
-                corrects.append(False)
+    #         if set(predicted_color_labels[i].tolist()).issubset(test_color_labels[i]) or set(test_color_labels[i]).issubset(predicted_color_labels[i].tolist()) \
+    #             and predicted_shape_labels[i] == test_class_labels[i]:
+    #             corrects.append(True)
+    #         else:
+    #             corrects.append(False)
 
-        visualize_retrieval(preds, images_to_show, names, corrects, title)
+    #     visualize_retrieval(preds, images_to_show, names, corrects, title)
 
-    print(get_color_accuracy(predicted_color_labels, test_color_labels))
-    print(get_shape_accuracy(predicted_shape_labels, test_class_labels))
+    # print(get_color_accuracy(predicted_color_labels, test_color_labels))
+    # print(get_shape_accuracy(predicted_shape_labels, test_class_labels))

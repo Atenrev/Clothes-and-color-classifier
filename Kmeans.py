@@ -63,7 +63,7 @@ class KMeans:
         if 'fitting' not in options:
             options['fitting'] = 'WCD'
         if 'threshold' not in options:
-            options['threshold']  = 0.9
+            options['threshold']  = 0.2
         if 'background_mask' not in options:
             options['background_mask']  = 250
 
@@ -119,7 +119,7 @@ class KMeans:
         self.old_centroids = np.array(self.centroids)
 
         for k in range(self.K):
-            if (self.labels == k).size > 0:
+            if (self.labels == k).sum() > 0:
                 self.centroids[k] = np.mean(self.X[self.labels == k], axis=0)
 
     def converges(self):
@@ -152,7 +152,7 @@ class KMeans:
         sumup = 1.0
         
         for i in range(len(clusters)):
-             sumup += np.mean(euclidean_distances(clusters[i], clusters[i]))
+             sumup += np.nanmean(euclidean_distances(clusters[i], clusters[i]))
 
         return sumup
 
@@ -192,11 +192,15 @@ class KMeans:
 
         sumup = 1
 
-        for i in range(self.K):
-            for j in range(i, self.K):
+        split_distances = npi.group_by(self.labels).split(self.labels_distances)
+
+        for i in range(len(split_distances)):
+            mean_distance_i = np.mean(split_distances[i])
+            for j in range(i, len(split_distances)):
+                mean_distance_j = np.mean(split_distances[j])
                 if i != j:
                     dist = self.centroids[i] - self.centroids[j]
-                    sumup += (self.labels_distances[i] + self.labels_distances[j]) / (dist * dist).sum()
+                    sumup += (mean_distance_i + mean_distance_j) / (dist * dist).sum()
         
         return sumup / self.K
 
@@ -218,6 +222,18 @@ class KMeans:
         b = self.inter_class_distance()
         return a/b
         
+    def perform_score(self):
+        if self.options['fitting'] == "WCD":
+            return self.within_class_distance()
+        elif self.options['fitting'] == "ICD":
+            return self.inter_class_distance()
+        elif self.options['fitting'] == "DB":
+            return self.davis_bouldin_score()
+        elif self.options['fitting'] == "fisher":
+            return self.fisher_score()
+        elif self.options['fitting'] == "silhouette":
+            return self.silhouette_score()
+
     def find_bestK(self, max_K):
         """
          sets the best k anlysing the results up to 'max_K' clusters
@@ -227,32 +243,16 @@ class KMeans:
        
         self.K = 1
         self.fit()
-
-        if self.options['fitting'] == "WCD":
-            score = self.within_class_distance()
-        elif self.options['fitting'] == "ICD":
-            score = self.inter_class_distance()
-        elif self.options['fitting'] == "DB":
-            score = self.davis_bouldin_score()
-        elif self.options['fitting'] == "fisher":
-            score = self.fisher_score()
-        elif self.options['fitting'] == "silhouette":
-            score = silhouette_score(self.X, self.labels)
+        # For some reason, python erases from the existance the labels in some rare exceptional cases...
+        while not hasattr(self, 'labels'):
+            self.fit()
+        score = self.perform_score()        
 
         for k in range(2, max_K+1):
             self.K = k
             self.fit()
 
-            if self.options['fitting'] == "WCD":
-                new_score = self.within_class_distance()
-            elif self.options['fitting'] == "ICD":
-                new_score = self.inter_class_distance()
-            elif self.options['fitting'] == "DB":
-                new_score = self.davis_bouldin_score()
-            elif self.options['fitting'] == "fisher":
-                new_score = self.fisher_score()
-            elif self.options['fitting'] == "silhouette":
-                new_score = silhouette_score(self.X, self.labels)
+            new_score = self.perform_score()
 
             if self.options['fitting'] == "silhouette":
                 if new_score < score or k == max_K:
@@ -291,7 +291,7 @@ def distance(X, C):
     """
     
     dist = X[:, :, None] - C[:, :, None].T
-    return (dist * dist).sum(1)
+    return (np.square(dist)).sum(1)
 
 
 def get_colors(centroids):
